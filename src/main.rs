@@ -3,7 +3,7 @@ mod file_processor;
 fn main() {
     //let elevation_filename = "MDT02-ETRS89-HU30-0592-4-COB2.asc_Cropped.dem";
     //file_read_test::file_read(elevation_filename);
-    println!("\nBienvenido a DEM to OBJ, este programa convierta mapas de elevacion en formato DEM (ESRI asc) a OBJ (solido 3d).\n");
+    println!("\nBienvenido a DEM to OBJ, este programa convierte mapas de elevacion en formato DEM (ESRI .asc) a .OBJ (solido 3d).\n");
 
     let wrong_parameters_msg = "Se requieren 3 parametros ruta fichero dem entrada, y ruta fichero stl salida y factor de correccion de altura por defecto 1000";
     let input_dem_filename:String = std::env::args().nth(1).expect(wrong_parameters_msg);

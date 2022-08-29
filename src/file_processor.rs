@@ -2,45 +2,71 @@ use std::fs::File;
 use std::io::{prelude::*, BufReader, BufWriter};
 use std::ops::Add;
 use std::time::Instant;
+
+use self::esri_header::EsriHeader;
 mod esri_header;
 mod vertex;
 mod triangle;
 
-pub fn process_file(input_filename: &str, output_filename: &str,elevation_factor: i32) {
-    let input_file = File::open(input_filename).expect("No se ha podido acceder al fichero de entrada");
-    let now = Instant::now();
-    let header:esri_header::EsriHeader =read_header(&input_file);
-    
-    println!("{}",header);
-    let output_file = File::create(output_filename).expect("no se ha podido escribir la salida");
-    // output_file.write(header.to_str().as_bytes()).expect("No se ha podido escribir en la salida");
-    
-    println!("header took {} millis.", now.elapsed().as_millis());
-    
-    let input_file = File::open(input_filename).expect("No se ha podido acceder al fichero de entrada");
-    let lines = BufReader::new(input_file).lines().skip(6)
-    .map(|x| x.unwrap())
-    .collect::<Vec<String>>();
-    
-    println!("Total Lines: {} ",lines.len());
-    
-    write_vertices(&header,lines,&output_file,elevation_factor);
-    write_normals(&output_file);
-    write_triangles(&header,&output_file);
 
+
+
+pub fn process_file(input_filename: &str, output_filename: &str,elevation_factor: i32) {
+    let mut input_file = File::open(input_filename).expect("No se ha podido acceder al fichero de entrada");
+    let mut input_string = String::new();
+    input_file.read_to_string(&mut input_string).expect("Error while reading file");
+    
+    let output_string:String =  process_string(input_string, elevation_factor); 
+
+    //TODO: FALTA LA VUELTA
+    
+    let output_file = File::create(output_filename).expect("no se ha podido escribir la salida");
+    let mut buf_file_output = BufWriter::new(output_file);
+    buf_file_output.write(output_string.as_bytes()).expect("Error al el fichero de salida");
+    
+}
+
+
+pub fn process_string(input_string: String, elevation_factor: i32) -> String {
+    let lines = input_string.lines().collect::<Vec<&str>>();
+    let output_string_vec:Vec<String> = process_string_vec(lines, elevation_factor);
+    let output_string = output_string_vec.join("\r\n");
+    
+    output_string
+}
+
+
+fn process_string_vec(lines: Vec<&str>, elevation_factor: i32) -> Vec<String>{
+    let now = Instant::now();
+    println!("Total Lines: {} ",lines.len());
+    let result =read_header(lines);
+
+    let header:esri_header::EsriHeader =result.0;
+    let lines_ = result.1;
+    println!("{}",header);
+    println!("header took {} millis.", now.elapsed().as_millis());
+    let mut output_vec: Vec<String> = Vec::new(); 
+
+    
+    
+    output_vec = write_vertices(&header,lines_,output_vec,elevation_factor);
+    output_vec = write_normals(output_vec);
+    output_vec = write_triangles(&header,output_vec);
+
+    output_vec
 
 }
 
-pub fn read_header (file: &File) -> esri_header::EsriHeader {
+
+pub fn read_header(input_string_vec: Vec<&str>) -> (esri_header::EsriHeader, Vec<&str>) {
     let expected_num_header_lines:u8 = 6;
     // let mut line : String = String::from("");
     let mut header:esri_header::EsriHeader = esri_header::EsriHeader::default();
 
-
-    let mut iter = BufReader::new(file).lines();
+    let mut iter = input_string_vec.iter();
 
     for _i in 1..expected_num_header_lines+1 {
-        let line = iter.next().unwrap().unwrap().to_uppercase();
+        let line = iter.next().unwrap().to_uppercase();
         println!("line{} ",line);
         //  BufReader::new(file).read_line(&mut line).expect("Error leyendo la cabecera");
         if line.starts_with("NCOLS") {
@@ -63,14 +89,13 @@ pub fn read_header (file: &File) -> esri_header::EsriHeader {
             header.nodatavalue = str_value.parse::<f32>().expect("El valor de la cabecera: NODATA_VALUE, no se ha podido parsear");
         }
     }
-    header
+    (header, input_string_vec)
 
 
 }
 
 
-fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<String>, output_file: &File,elevation_factor: i32) {
-    let mut buf_file_output = BufWriter::new(output_file);
+fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<&str>, mut output_vec: Vec<String>,elevation_factor: i32) -> Vec<String>{
     let now = Instant::now();
     let mut line_num = 0;
     let ok_cellsize = elevation_factor * header.cellsize;
@@ -111,7 +136,8 @@ fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<String>, output_fi
             };
             
             let current_vertex:vertex::Vertex = vertex::Vertex{x: col_num * ok_cellsize, y: line_num * ok_cellsize, z: elevation_value};
-            buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice");
+            output_vec.push(current_vertex.to_str());
+            //buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice");
             col_num +=1;
         }
         line_num+=1;
@@ -125,7 +151,8 @@ fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<String>, output_fi
     //TOP vertex
     for x in 0..header.ncols {
         let current_vertex:vertex::Vertex = vertex::Vertex{x: x * ok_cellsize, y: 0, z: base_z};
-        buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice top");
+        //buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice top");
+        output_vec.push(current_vertex.to_str());
         // print!("vertexT {} ",current_vertex.to_str());
     }
     
@@ -133,7 +160,8 @@ fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<String>, output_fi
     let right_x = (header.ncols -1) * ok_cellsize;
     for y in 0..header.nrows {
         let current_vertex:vertex::Vertex = vertex::Vertex{x: right_x, y: y * ok_cellsize, z: base_z};
-        buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice right");
+        //buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice right");
+        output_vec.push(current_vertex.to_str());
         // print!("vertexR {} ",current_vertex.to_str());
     }
     
@@ -141,27 +169,32 @@ fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<String>, output_fi
     let bottom_y = (header.nrows -1) * ok_cellsize;
     for x in 0..header.ncols{
         let current_vertex:vertex::Vertex = vertex::Vertex{x: x * ok_cellsize, y: bottom_y , z: base_z};
-        buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice bottom");
+        //buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice bottom");
+        output_vec.push(current_vertex.to_str());
         // print!("vertexB {} ",current_vertex.to_str());
     }
 
     //LEFT vertex
     for y in 0..header.nrows{
         let current_vertex:vertex::Vertex = vertex::Vertex{x: 0, y: y * ok_cellsize, z: base_z};
-        buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice left");
+        //buf_file_output.write(current_vertex.to_str().as_bytes()).expect("Error al escribir algun vertice left");
+        output_vec.push(current_vertex.to_str());
         // print!("vertexL {} ",current_vertex.to_str());
     }
         
     
     println!("write_vertices took {} millis.", now.elapsed().as_millis());
+    output_vec
 }
 
-fn write_normals(mut output_file:&File) {
-    output_file.write("\r\nvn  0.0  0.0  1.0 \r\n\r\n".as_bytes()).expect("Error al escribir las normales");
+fn write_normals(mut output_vec:Vec<String>) ->Vec<String>{
+    //output_file.write("\r\nvn  0.0  0.0  1.0 \r\n\r\n".as_bytes()).expect("Error al escribir las normales");
+    output_vec.push("\r\nvn  0.0  0.0  1.0 \r\n\r\n".to_string());
+    output_vec
 }
 
-fn write_triangles(header: &esri_header::EsriHeader,output_file: &File) {
-    let mut buf_file_output = BufWriter::new(output_file);
+fn write_triangles(header: &esri_header::EsriHeader,mut output_vec: Vec<String>) ->Vec<String> {
+    //let mut buf_file_output = BufWriter::new(output_file);
     let now = Instant::now();
     for y in 1..(header.nrows ) {
         let offset = (y - 1) * header.ncols;
@@ -182,7 +215,8 @@ fn write_triangles(header: &esri_header::EsriHeader,output_file: &File) {
             let triangle2: triangle::Triangle = triangle::Triangle { v1: current_id, v2: current_id + 1 + header.ncols, v3: current_id + header.ncols };
             let mut square: String = String::from(triangle1.to_str());
             square = square.add(triangle2.to_str().as_str());
-            buf_file_output.write(square.as_bytes()).expect("Error al escribir triangulos");
+            //buf_file_output.write(square.as_bytes()).expect("Error al escribir triangulos");
+            output_vec.push(square.to_string());
         }
 
     }
@@ -196,15 +230,19 @@ fn write_triangles(header: &esri_header::EsriHeader,output_file: &File) {
     for i_col in 1..header.ncols {
         //TOP WALL
         let triangle1: triangle::Triangle = triangle::Triangle { v1: i_col, v2: i_col + offset, v3: i_col + 1 };
-        buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        //buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        output_vec.push(triangle1.to_str().to_string());
         let triangle2: triangle::Triangle = triangle::Triangle { v1: i_col + 1 , v2: i_col +offset, v3: i_col + offset +1};
-        buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        // buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        output_vec.push(triangle2.to_str().to_string());
     
         //BOTTOM WALL
         let triangle1: triangle::Triangle = triangle::Triangle { v1: i_col + offset_last_row + 1 , v2: i_col + offset_bottom, v3:i_col + offset_last_row };
-        buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        // buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        output_vec.push(triangle1.to_str().to_string());
         let triangle2: triangle::Triangle = triangle::Triangle { v1:  i_col + offset_bottom +1 , v2: i_col + offset_bottom, v3:i_col + offset_last_row + 1  };
-        buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        // buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        output_vec.push(triangle2.to_str().to_string());
 
     }
 
@@ -214,24 +252,30 @@ fn write_triangles(header: &esri_header::EsriHeader,output_file: &File) {
     for j_row in 1..header.nrows {
         //RIGHT WALL
         let triangle1: triangle::Triangle = triangle::Triangle { v1: header.ncols* (j_row +1), v2: header.ncols*j_row, v3: start_right + j_row};
-        buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        // buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        output_vec.push(triangle1.to_str().to_string());
         let triangle2: triangle::Triangle = triangle::Triangle { v1: header.ncols*(j_row+1) , v2: start_right + j_row , v3: start_right + j_row + 1};
-        buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        // buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        output_vec.push(triangle2.to_str().to_string());
 
         //LEFT WALL
         let triangle1: triangle::Triangle = triangle::Triangle { v1:start_left + j_row, v2: header.ncols*(j_row-1) +1, v3:  header.ncols * j_row + 1};
-        buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        // buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        output_vec.push(triangle1.to_str().to_string());
         let triangle2: triangle::Triangle = triangle::Triangle { v1: start_left + j_row + 1 , v2: start_left + j_row , v3:header.ncols*(j_row) +1 };
-        buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        // buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+        output_vec.push(triangle2.to_str().to_string());
         
     }
 
     //BOTTOM LID
 
     let triangle1: triangle::Triangle = triangle::Triangle { v1:offset + header.ncols +header.nrows , v2: offset + header.ncols, v3: offset + 1 };
-    buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+    // buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+    output_vec.push(triangle1.to_str().to_string());
     let triangle2: triangle::Triangle = triangle::Triangle { v1: offset + header.ncols +header.nrows, v2:  offset + 1, v3: offset + header.ncols*2 +header.nrows*2 };
-    buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+    // buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
+    output_vec.push(triangle2.to_str().to_string());
 
 
 
@@ -242,5 +286,7 @@ fn write_triangles(header: &esri_header::EsriHeader,output_file: &File) {
 
 
     println!("write_triangles took {} millis.", now.elapsed().as_millis());
+
+    output_vec
 }
 
