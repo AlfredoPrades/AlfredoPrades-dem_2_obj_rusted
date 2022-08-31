@@ -1,9 +1,7 @@
 use std::fs::File;
-use std::io::{prelude::*, BufReader, BufWriter};
+use std::io::{prelude::*, BufWriter};
 use std::ops::Add;
 use std::time::Instant;
-
-use self::esri_header::EsriHeader;
 mod esri_header;
 mod vertex;
 mod triangle;
@@ -30,7 +28,7 @@ pub fn process_file(input_filename: &str, output_filename: &str,elevation_factor
 pub fn process_string(input_string: String, elevation_factor: i32) -> String {
     let lines = input_string.lines().collect::<Vec<&str>>();
     let output_string_vec:Vec<String> = process_string_vec(lines, elevation_factor);
-    let output_string = output_string_vec.join("\r\n");
+    let output_string = output_string_vec.join("");
     
     output_string
 }
@@ -43,6 +41,8 @@ fn process_string_vec(lines: Vec<&str>, elevation_factor: i32) -> Vec<String>{
 
     let header:esri_header::EsriHeader =result.0;
     let lines_ = result.1;
+
+    
     println!("{}",header);
     println!("header took {} millis.", now.elapsed().as_millis());
     let mut output_vec: Vec<String> = Vec::new(); 
@@ -104,11 +104,12 @@ fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<&str>, mut output_
     // let mut err_msg = String::from("valor de elevation incorrecto: ");
     
     // First we find the lowest and highest elevation values so we put the lowest in the nodataValues in the second pass
-    for line in lines.iter() {
+    for line in lines.iter().skip(6) {
         for elevation_str in line.split(" ") {
             if elevation_str.is_empty() {
                 continue;
             }
+            //println!("Parse: f32 {}", elevation_str);
             let elevation_value = elevation_str.parse::<f32>().expect(elevation_str);
 
             if elevation_value == header.nodatavalue {
@@ -122,7 +123,7 @@ fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<&str>, mut output_
         }
     }
 
-    for line in lines.iter() {
+    for line in lines.iter().skip(6) {
         let mut col_num = 0;
         for elevation_str in line.split(" ") {
             if elevation_str.is_empty() {
