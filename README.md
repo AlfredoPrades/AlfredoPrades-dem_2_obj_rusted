@@ -18,21 +18,18 @@ There are great websites that allow you to do that but only from the sources the
 
 Run with cargo
     
-        ```
         cargo run .\test\Penyagolosa2m.asc .\test\Penyagolosa2m.obj
-        ```
+        
 
 Run the binary
 
-        ```
         dem_2_obj.exe  .\test\Penyagolosa2m.asc .\test\Penyagolosa2m.obj
-        ```
 
 Run 3rd optional parameter (elevation modifier) to exagerate elevation:
 
-        ```
+
         dem_2_obj.exe  .\test\Penyagolosa2m.asc .\test\Penyagolosa2m.obj 1000
-        ```
+
 
 Example values for the elevation modifier parameter:
     * 500: 2x Spipkyness
