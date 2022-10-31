@@ -1,3 +1,4 @@
+use std::cmp;
 use std::fs::File;
 use std::io::{prelude::*, BufWriter};
 use std::ops::Add;
@@ -10,17 +11,15 @@ mod triangle;
 
 
 pub fn process_file(input_filename: &str, output_filename: &str,elevation_factor: i32) {
-    let mut input_file = File::open(input_filename).expect("No se ha podido acceder al fichero de entrada");
+    let mut input_file = File::open(input_filename).expect("Unable to find the input file");
     let mut input_string = String::new();
     input_file.read_to_string(&mut input_string).expect("Error while reading file");
     
     let output_string:String =  process_string(input_string, elevation_factor); 
 
-    //TODO: FALTA LA VUELTA
-    
-    let output_file = File::create(output_filename).expect("no se ha podido escribir la salida");
+    let output_file = File::create(output_filename).expect("Unable to create to the output file");
     let mut buf_file_output = BufWriter::new(output_file);
-    buf_file_output.write(output_string.as_bytes()).expect("Error al el fichero de salida");
+    buf_file_output.write(output_string.as_bytes()).expect("Unable to write to the output file");
     
 }
 
@@ -43,8 +42,8 @@ fn process_string_vec(lines: Vec<&str>, elevation_factor: i32) -> Vec<String>{
     let lines_ = result.1;
 
     
-    println!("{}",header);
-    println!("header took {} millis.", now.elapsed().as_millis());
+    //println!("{}",header);
+    println!("Header took {} millis.", now.elapsed().as_millis());
     let mut output_vec: Vec<String> = Vec::new(); 
 
     
@@ -67,26 +66,26 @@ pub fn read_header(input_string_vec: Vec<&str>) -> (esri_header::EsriHeader, Vec
 
     for _i in 1..expected_num_header_lines+1 {
         let line = iter.next().unwrap().to_uppercase();
-        println!("line{} ",line);
+        //  println!("line{} ",line);
         //  BufReader::new(file).read_line(&mut line).expect("Error leyendo la cabecera");
         if line.starts_with("NCOLS") {
             let str_value = line.strip_prefix("NCOLS ").unwrap().trim();
-            header.ncols = str_value.parse::<i32>().expect("El valor de la cabecera: NCOLS, no se ha podido parsear");
+            header.ncols = str_value.parse::<i32>().expect("Header field: : NCOLS, could not be parsed");
         } else if line.starts_with("NROWS") {
             let str_value = line.strip_prefix("NROWS ").unwrap().trim();
-            header.nrows = str_value.parse::<i32>().expect("El valor de la cabecera: NROWS, no se ha podido parsear");
+            header.nrows = str_value.parse::<i32>().expect("Header field: : NROWS, could not be parsed");
         } else if line.starts_with("XLLCENTER") {
             let str_value = line.strip_prefix("XLLCENTER ").unwrap().trim();
-            header.xllcenter = str_value.parse::<i32>().expect("El valor de la cabecera: XLLCENTER, no se ha podido parsear");
+            header.xllcenter = str_value.parse::<i32>().expect("Header field: : XLLCENTER, could not be parsed");
         } else if line.starts_with("YLLCENTER") {
             let str_value = line.strip_prefix("YLLCENTER ").unwrap().trim();
-            header.yllcenter = str_value.parse::<i32>().expect("El valor de la cabecera: YLLCENTER, no se ha podido parsear");
+            header.yllcenter = str_value.parse::<i32>().expect("Header field: : YLLCENTER, could not be parsed");
         } else if line.starts_with("CELLSIZE") {
             let str_value = line.strip_prefix("CELLSIZE ").unwrap().trim();
-            header.cellsize = str_value.parse::<i32>().expect("El valor de la cabecera: CELLSIZE, no se ha podido parsear");
+            header.cellsize = str_value.parse::<i32>().expect("Header field: : CELLSIZE, could not be parsed");
         } else if line.starts_with("NODATA_VALUE") {
             let str_value = line.strip_prefix("NODATA_VALUE ").unwrap().trim();
-            header.nodatavalue = str_value.parse::<f32>().expect("El valor de la cabecera: NODATA_VALUE, no se ha podido parsear");
+            header.nodatavalue = str_value.parse::<f32>().expect("Header field: : NODATA_VALUE, could not be parsed");
         }
     }
     (header, input_string_vec)
@@ -98,7 +97,10 @@ pub fn read_header(input_string_vec: Vec<&str>) -> (esri_header::EsriHeader, Vec
 fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<&str>, mut output_vec: Vec<String>,elevation_factor: i32) -> Vec<String>{
     let now = Instant::now();
     let mut line_num = 0;
-    let ok_cellsize = elevation_factor * header.cellsize;
+    let ok_cellsize = cmp::max(( header.cellsize*1000) /elevation_factor, 1); //Penyagolosa 2 ok   
+    // println!("elevation_factor: {} ",elevation_factor);
+    // println!("header.cellsize: {} ",header.cellsize);
+    // println!("ok_cellsize: {} ",ok_cellsize);
     let mut max_elevation = f32::MIN;
     let mut min_elevation = f32::MAX;
     // let mut err_msg = String::from("valor de elevation incorrecto: ");
@@ -184,7 +186,7 @@ fn write_vertices(header: &esri_header::EsriHeader,lines: Vec<&str>, mut output_
     }
         
     
-    println!("write_vertices took {} millis.", now.elapsed().as_millis());
+    println!("Write_vertices took {} millis.", now.elapsed().as_millis());
     output_vec
 }
 
@@ -263,7 +265,7 @@ fn write_triangles(header: &esri_header::EsriHeader,mut output_vec: Vec<String>)
         let triangle1: triangle::Triangle = triangle::Triangle { v1:start_left + j_row, v2: header.ncols*(j_row-1) +1, v3:  header.ncols * j_row + 1};
         // buf_file_output.write(triangle1.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
         output_vec.push(triangle1.to_str().to_string());
-        let triangle2: triangle::Triangle = triangle::Triangle { v1: start_left + j_row + 1 , v2: start_left + j_row , v3:header.ncols*(j_row) +1 };
+        let triangle2: triangle::Triangle = triangle::Triangle { v1: start_left + j_row + 1 , v2: start_left + j_row , v3:header.ncols*j_row +1 };
         // buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
         output_vec.push(triangle2.to_str().to_string());
         
@@ -278,15 +280,7 @@ fn write_triangles(header: &esri_header::EsriHeader,mut output_vec: Vec<String>)
     // buf_file_output.write(triangle2.to_str().as_bytes()).expect("Error al escribir triangulos top perimeter");
     output_vec.push(triangle2.to_str().to_string());
 
-
-
-
-
-
-    //FALTAN LAS PAREDES Y LA BASE
-
-
-    println!("write_triangles took {} millis.", now.elapsed().as_millis());
+    println!("Write triangles took {} millis.", now.elapsed().as_millis());
 
     output_vec
 }
